@@ -31,7 +31,7 @@ app.get('/health', (req, res) => {
   res.json({ 
     status: 'ok', 
     timestamp: new Date().toISOString(),
-    hasOpenAIKey: !!process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY !== 'your_openai_api_key_here'
+    hasGeminiKey: !!process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'your_gemini_api_key_here'
   });
 });
 
@@ -219,8 +219,8 @@ app.listen(PORT, () => {
 🚀 Server running on port ${PORT}
 🔗 API available at http://localhost:${PORT}
 📊 Health check: http://localhost:${PORT}/health
-${process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY !== 'your_openai_api_key_here' 
-  ? '✅ OpenAI API key detected' 
-  : '⚠️  No OpenAI API key - using mock data'}
+${process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'your_gemini_api_key_here' 
+  ? '✅ Gemini API key detected' 
+  : '⚠️  No Gemini API key - using mock data'}
   `);
 });

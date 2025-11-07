@@ -1,6 +1,3 @@
-# README.md
-
-```markdown
 # FieldForm AI
 
 > No-Code AI-Powered Field Form Generator
@@ -10,10 +7,11 @@ Transform natural language descriptions into fully functional web forms with val
 ## ✨ What It Does
 
 - **Describe → Generate**: Turn plain English into working forms
-- **AI-Powered**: Uses OpenAI to understand your form requirements  
+- **AI-Powered**: Uses Gemini AI to understand your form requirements  
 - **Smart Validation**: Automatic client & server-side validation
 - **Conditional Notifications**: Get alerts based on form data
 - **Demo Ready**: Pre-built examples and test cases
+- **Local Storage**: All forms and submissions stored in `backend/data/` JSON files
 
 ## 🚀 Quick Start
 
@@ -39,11 +37,11 @@ cd backend
 
 # Initialize and install dependencies
 npm init -y
-npm install express cors dotenv openai
+npm install express cors dotenv @google/genai
 npm install --save-dev nodemon jest
 
 # Create environment file
-echo "OPENAI_API_KEY=your_openai_api_key_here
+echo "GEMINI_API_KEY=your_gemini_api_key_here
 PORT=5000
 NODE_ENV=development" > .env
 
@@ -74,9 +72,9 @@ echo "VITE_API_BASE_URL=http://localhost:5000" > .env
 npm run dev
 ```
 
-### 4. Configure OpenAI (Optional)
+### 4. Configure Gemini API (Optional)
 
-1. Get API key from [OpenAI Platform](https://platform.openai.com/api-keys)
+1. Get API key from [GeminiAi Platform](https://ai.google.dev/gemini-api/docs/quickstart)
 2. Update `backend/.env` with your actual key
 3. **No key?** The app uses mock data for demo
 
@@ -112,7 +110,7 @@ fieldform-ai/
 
 ## 🛠 Tech Stack
 
-- **Backend**: Node.js, Express, OpenAI API
+- **Backend**: Node.js, Express, Gemnini API
 - **Frontend**: React, Vite, Tailwind CSS
 - **Storage**: JSON files (file-based)
 
