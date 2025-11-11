@@ -1,10 +1,14 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 import API from '../utils/api';
 import DynamicForm from '../components/DynamicForm';
+import LoadingSkeleton from '../components/LoadingSkeleton';
 
 export default function AgentFormFill() {
+  const { user } = useAuth();
+  const { formId } = useParams(); // Get formId from URL if present
   const [forms, setForms] = useState([]);
   const [selectedForm, setSelectedForm] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -18,16 +22,34 @@ export default function AgentFormFill() {
     fetchForms();
   }, []);
 
+  // If formId is in URL, auto-select that form
+  useEffect(() => {
+    if (formId && forms.length > 0) {
+      const form = forms.find(f => f._id === formId);
+      if (form) {
+        setSelectedForm(form);
+      } else {
+        toast.error('Form not found or not assigned to you');
+        navigate('/agent-forms');
+      }
+    }
+  }, [formId, forms]);
+
   const fetchForms = async () => {
     try {
       setLoading(true);
+      console.log('🔍 Fetching assigned forms for field agent...');
       const response = await API.get('/forms');
+      console.log('✅ Assigned forms:', response.data.forms);
       setForms(response.data.forms);
       
       // Fetch submissions for all forms
       await fetchSubmissionsForForms(response.data.forms);
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to fetch forms');
+      const errorMsg = err.response?.data?.error || 'Failed to fetch forms';
+      setError(errorMsg);
+      console.error('❌ Error fetching forms:', err);
+      toast.error(errorMsg);
     } finally {
       setLoading(false);
     }
@@ -39,28 +61,33 @@ export default function AgentFormFill() {
       const submissionsMap = {};
       
       submissionsResponse.data.submissions.forEach(submission => {
-        const formId = submission.formId._id || submission.formId;
-        if (!submissionsMap[formId]) {
-          submissionsMap[formId] = [];
+        const fId = submission.formId._id || submission.formId;
+        if (!submissionsMap[fId]) {
+          submissionsMap[fId] = [];
         }
-        submissionsMap[formId].push(submission);
+        submissionsMap[fId].push(submission);
       });
       
       setSubmissions(submissionsMap);
     } catch (err) {
-      toast.error('Failed to fetch submissions');
+      console.error('Failed to fetch submissions:', err);
     }
   };
 
   const handleFormClick = (form) => {
+    console.log('📝 Opening form:', form.title);
     setSelectedForm(form);
     setError('');
+    // Update URL without reloading
+    navigate(`/agent-forms/${form._id}`, { replace: true });
   };
 
   const handleBackToList = () => {
+    console.log('⬅️ Returning to form list');
     setSelectedForm(null);
     setError('');
-    fetchForms();
+    navigate('/agent-forms', { replace: true });
+    fetchForms(); // Refresh the list
   };
 
   const handleSubmit = async (formData) => {
@@ -68,12 +95,14 @@ export default function AgentFormFill() {
     setError('');
 
     try {
+      console.log('📤 Submitting form data:', { formId: selectedForm._id, data: formData });
       await API.post('/submissions', {
         formId: selectedForm._id,
         data: formData
       });
       
       toast.success('Form submitted successfully!');
+      console.log('✅ Form submitted successfully');
       
       // Refresh submissions
       await fetchSubmissionsForForms(forms);
@@ -86,6 +115,7 @@ export default function AgentFormFill() {
       const errorMessage = err.response?.data?.error || 'Failed to submit form';
       setError(errorMessage);
       toast.error(errorMessage);
+      console.error('❌ Submission error:', err);
     } finally {
       setSubmitting(false);
     }
@@ -121,7 +151,8 @@ export default function AgentFormFill() {
           <div className="mb-6 flex items-center gap-4">
             <button
               onClick={handleBackToList}
-              className="bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400 font-medium flex items-center gap-2"
+              disabled={submitting}
+              className="bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400 font-medium flex items-center gap-2 disabled:opacity-50"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
@@ -137,7 +168,7 @@ export default function AgentFormFill() {
             </div>
           )}
 
-          <div className="bg-white rounded-lg shadow-md">
+          <div className="bg-white rounded-lg shadow-md p-6">
             <DynamicForm
               schema={selectedForm.fields}
               onSubmit={handleSubmit}
@@ -149,7 +180,7 @@ export default function AgentFormFill() {
           {/* Submission History */}
           {submissions[selectedForm._id] && submissions[selectedForm._id].length > 0 && (
             <div className="mt-6 bg-white rounded-lg shadow-md p-6">
-              <h3 className="text-xl font-bold text-gray-800 mb-4">Submission History</h3>
+              <h3 className="text-xl font-bold text-gray-800 mb-4">Your Submission History</h3>
               <div className="space-y-3">
                 {submissions[selectedForm._id].map((submission, idx) => (
                   <div
@@ -165,6 +196,12 @@ export default function AgentFormFill() {
                           {formatDate(submission.createdAt)}
                         </span>
                       </div>
+                      <button
+                        onClick={() => navigate(`/submissions/${submission._id}`)}
+                        className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                      >
+                        View Details →
+                      </button>
                     </div>
                     <div className="text-sm text-gray-600">
                       {Object.entries(submission.data || {}).slice(0, 3).map(([key, value]) => (
@@ -186,13 +223,18 @@ export default function AgentFormFill() {
   // Show loading state
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="flex flex-col items-center">
-          <svg className="animate-spin h-12 w-12 text-blue-600 mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-          </svg>
-          <div className="text-gray-600">Loading forms...</div>
+      <div className="min-h-screen bg-gray-50 py-8">
+        <div className="max-w-7xl mx-auto px-4">
+          <div className="flex justify-between items-center mb-6">
+            <h1 className="text-3xl font-bold text-blue-600">My Assigned Forms</h1>
+            <button
+              onClick={() => navigate('/dashboard')}
+              className="bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400 font-medium"
+            >
+              ← Back to Dashboard
+            </button>
+          </div>
+          <LoadingSkeleton variant="card" />
         </div>
       </div>
     );
@@ -215,6 +257,12 @@ export default function AgentFormFill() {
         {error && (
           <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
             {error}
+            <button
+              onClick={fetchForms}
+              className="ml-4 underline hover:text-red-800"
+            >
+              Retry
+            </button>
           </div>
         )}
 
@@ -235,8 +283,7 @@ export default function AgentFormFill() {
               return (
                 <div
                   key={form._id}
-                  onClick={() => handleFormClick(form)}
-                  className="bg-white rounded-lg shadow-md overflow-hidden cursor-pointer hover:shadow-xl transition-all border-2 border-transparent hover:border-blue-400"
+                  className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-all border-2 border-transparent hover:border-blue-400"
                 >
                   <div className="p-6">
                     <h3 className="text-xl font-bold text-gray-800 mb-2">{form.title}</h3>
@@ -271,7 +318,10 @@ export default function AgentFormFill() {
                       </div>
                     )}
                     
-                    <button className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 font-semibold transition-colors">
+                    <button 
+                      onClick={() => handleFormClick(form)}
+                      className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 font-semibold transition-colors"
+                    >
                       {formSubmissions.length > 0 ? 'Fill Again' : 'Fill Form'}
                     </button>
                   </div>
@@ -284,4 +334,3 @@ export default function AgentFormFill() {
     </div>
   );
 }
-

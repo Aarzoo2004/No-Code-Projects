@@ -12,12 +12,16 @@ router.get('/stats', auth, async (req, res) => {
   try {
     let stats = {};
 
+    console.log('📊 Fetching stats for user:', req.userId, 'role:', req.userRole);
+
     if (req.userRole === 'admin') {
       // Admin sees everything
       const [totalForms, totalSubmissions, allSubmissions, users] = await Promise.all([
         Form.countDocuments(),
         Submission.countDocuments(),
-        Submission.find().sort({ createdAt: -1 }).limit(5).populate('formId', 'title'),
+        Submission.find().sort({ createdAt: -1 }).limit(10)
+          .populate('formId', 'title')
+          .populate('submittedBy', 'name email'),
         User.find().select('role name')
       ]);
 
@@ -45,20 +49,26 @@ router.get('/stats', auth, async (req, res) => {
         usersByRole
       };
 
+      console.log('👑 Admin stats:', { totalForms, totalSubmissions, pendingCount, approvedCount, rejectedCount });
+
     } else if (req.userRole === 'manager') {
       // Manager sees their forms and submissions for their forms
       const managerForms = await Form.find({ createdBy: req.userId }).select('_id');
       const formIds = managerForms.map(f => f._id);
+
+      console.log('👔 Manager forms found:', formIds.length, 'Form IDs:', formIds);
 
       const [totalForms, totalSubmissions, allSubmissions] = await Promise.all([
         Form.countDocuments({ createdBy: req.userId }),
         Submission.countDocuments({ formId: { $in: formIds } }),
         Submission.find({ formId: { $in: formIds } })
           .sort({ createdAt: -1 })
-          .limit(5)
+          .limit(10)
           .populate('formId', 'title')
           .populate('submittedBy', 'name email')
       ]);
+
+      console.log('👔 Manager submissions query:', { formIds: formIds.length, totalSubmissions });
 
       // Count submissions by status for manager's forms
       const pendingCount = await Submission.countDocuments({ 
@@ -73,6 +83,8 @@ router.get('/stats', auth, async (req, res) => {
         formId: { $in: formIds },
         status: 'rejected' 
       });
+
+      console.log('👔 Manager status counts:', { pendingCount, approvedCount, rejectedCount });
 
       stats = {
         role: 'manager',
@@ -91,7 +103,7 @@ router.get('/stats', auth, async (req, res) => {
         Form.find({ assignedTo: req.userId }).select('_id'),
         Submission.find({ submittedBy: req.userId })
           .sort({ createdAt: -1 })
-          .limit(5)
+          .limit(10)
           .populate('formId', 'title')
           .populate('submittedBy', 'name email'),
         Submission.countDocuments({ submittedBy: req.userId })
@@ -120,12 +132,15 @@ router.get('/stats', auth, async (req, res) => {
         completionRate: totalSubmissions > 0 ? ((approvedCount / totalSubmissions) * 100).toFixed(2) : 0,
         recentSubmissions: allSubmissions
       };
+
+      console.log('👷 Field agent stats:', { assignedForms: assignedForms.length, totalSubmissions, pendingCount });
     }
 
+    console.log('✅ Stats generated successfully for role:', req.userRole);
     res.json(stats);
 
   } catch (error) {
-    console.error('Dashboard stats error:', error);
+    console.error('❌ Dashboard stats error:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -140,6 +155,8 @@ router.post('/report', auth, async (req, res) => {
 
     const { dateFrom, dateTo, formId } = req.body;
 
+    console.log('📊 Report generation request:', { dateFrom, dateTo, formId, role: req.userRole });
+
     // Build query based on user role
     let query = {};
 
@@ -153,6 +170,7 @@ router.post('/report', auth, async (req, res) => {
       }
       
       query.formId = { $in: formIds };
+      console.log('👔 Manager report - Forms:', formIds.length);
     }
     // Admin can see all submissions (no additional query restrictions)
 
@@ -185,12 +203,16 @@ router.post('/report', auth, async (req, res) => {
       .populate('submittedBy', 'name email')
       .sort({ createdAt: -1 });
 
+    console.log('📊 Submissions found for report:', submissions.length);
+
     if (submissions.length === 0) {
       return res.status(404).json({ error: 'No submissions found matching the criteria.' });
     }
 
     // Generate AI report
     const report = await generateReport(submissions);
+
+    console.log('✅ Report generated successfully');
 
     res.json({
       success: true,
@@ -204,7 +226,7 @@ router.post('/report', auth, async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Report generation error:', error);
+    console.error('❌ Report generation error:', error);
     
     // Handle specific error types
     if (error.message.includes('No submissions provided')) {
@@ -226,4 +248,3 @@ router.post('/report', auth, async (req, res) => {
 });
 
 module.exports = router;
-

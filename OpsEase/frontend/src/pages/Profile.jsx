@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 
 export default function Profile() {
-  const [user, setUser] = useState(null);
+  const { user, logout } = useAuth();
   const [passwordData, setPasswordData] = useState({
     currentPassword: '',
     newPassword: '',
@@ -11,15 +12,6 @@ export default function Profile() {
   });
   const [updating, setUpdating] = useState(false);
   const navigate = useNavigate();
-
-  useEffect(() => {
-    const userData = localStorage.getItem('user');
-    if (!userData) {
-      navigate('/login');
-    } else {
-      setUser(JSON.parse(userData));
-    }
-  }, [navigate]);
 
   const handlePasswordChange = (field, value) => {
     setPasswordData(prev => ({
@@ -31,7 +23,6 @@ export default function Profile() {
   const handlePasswordUpdate = async (e) => {
     e.preventDefault();
     
-    // Validation
     if (!passwordData.currentPassword) {
       toast.error('Please enter your current password');
       return;
@@ -55,10 +46,8 @@ export default function Profile() {
     setUpdating(true);
     
     try {
-      // Simulate API call
       await new Promise(resolve => setTimeout(resolve, 1000));
       
-      // Clear form
       setPasswordData({
         currentPassword: '',
         newPassword: '',
@@ -74,8 +63,7 @@ export default function Profile() {
   };
 
   const handleLogout = () => {
-    localStorage.clear();
-    navigate('/login');
+    logout();
     toast.success('Logged out successfully');
   };
 
@@ -98,24 +86,44 @@ export default function Profile() {
     }
   };
 
-  if (!user) return null;
+  const getRoleLabel = (role) => {
+    const labels = {
+      admin: 'Administrator',
+      manager: 'Manager',
+      fieldAgent: 'Field Agent'
+    };
+    return labels[role] || role;
+  };
+
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-gray-600">Loading user data...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="max-w-4xl mx-auto px-4">
-        {/* Header */}
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold text-blue-600">Profile Settings</h1>
-          <p className="text-gray-600 mt-2">Manage your account information and security settings</p>
+        <div className="mb-6 flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-blue-600">Profile Settings</h1>
+            <p className="text-gray-600 mt-2">Manage your account information and security settings</p>
+          </div>
+          <button
+            onClick={() => navigate('/dashboard')}
+            className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600"
+          >
+            ← Back to Dashboard
+          </button>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* User Information Card */}
           <div className="bg-white rounded-lg shadow-md p-6">
             <h2 className="text-xl font-bold text-gray-800 mb-6">Account Information</h2>
             
             <div className="space-y-4">
-              {/* Profile Avatar */}
               <div className="flex items-center space-x-4 mb-6">
                 <div className="h-16 w-16 bg-blue-100 rounded-full flex items-center justify-center">
                   <span className="text-2xl font-bold text-blue-600">
@@ -128,7 +136,6 @@ export default function Profile() {
                 </div>
               </div>
 
-              {/* User Details */}
               <div className="space-y-3">
                 <div className="flex justify-between items-center py-2 border-b border-gray-100">
                   <span className="text-sm font-medium text-gray-600">Name</span>
@@ -143,21 +150,18 @@ export default function Profile() {
                 <div className="flex justify-between items-center py-2 border-b border-gray-100">
                   <span className="text-sm font-medium text-gray-600">Role</span>
                   <span className={`px-3 py-1 text-xs rounded-full font-semibold border ${getRoleColor(user.role)}`}>
-                    {user.role ? user.role.charAt(0).toUpperCase() + user.role.slice(1) : 'N/A'}
+                    {getRoleLabel(user.role)}
                   </span>
                 </div>
                 
                 <div className="flex justify-between items-center py-2">
-                  <span className="text-sm font-medium text-gray-600">Account Created</span>
-                  <span className="text-sm text-gray-900">
-                    {formatDate(user.createdAt || new Date().toISOString())}
-                  </span>
+                  <span className="text-sm font-medium text-gray-600">User ID</span>
+                  <span className="text-sm text-gray-500 font-mono text-xs">{user.id}</span>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Password Change Card */}
           <div className="bg-white rounded-lg shadow-md p-6">
             <h2 className="text-xl font-bold text-gray-800 mb-6">Change Password</h2>
             
@@ -215,10 +219,9 @@ export default function Profile() {
               </button>
             </form>
 
-            {/* Security Notice */}
             <div className="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
               <div className="flex items-start">
-                <svg className="h-5 w-5 text-yellow-600 mt-0.5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg className="h-5 w-5 text-yellow-600 mt-0.5 mr-2 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
                 </svg>
                 <div>
@@ -232,7 +235,6 @@ export default function Profile() {
           </div>
         </div>
 
-        {/* Logout Section */}
         <div className="mt-6 bg-white rounded-lg shadow-md p-6">
           <div className="flex items-center justify-between">
             <div>

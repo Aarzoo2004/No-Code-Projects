@@ -1,13 +1,15 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import API from '../utils/api';
 import LoadingSkeleton from '../components/LoadingSkeleton';
+import toast from 'react-hot-toast';
 
 export default function FormList() {
+  const { user } = useAuth();
   const [forms, setForms] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [user, setUser] = useState(null);
   const [assigningForm, setAssigningForm] = useState(null);
   const [agentIds, setAgentIds] = useState([]);
   const [agents, setAgents] = useState([]);
@@ -18,10 +20,15 @@ export default function FormList() {
 
   const fetchForms = async () => {
     try {
+      console.log('📋 Fetching forms for user role:', user?.role);
       const response = await API.get('/forms');
+      console.log('✅ Forms received:', response.data.forms.length);
       setForms(response.data.forms);
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to fetch forms');
+      const errorMsg = err.response?.data?.error || 'Failed to fetch forms';
+      setError(errorMsg);
+      console.error('❌ Error fetching forms:', err);
+      toast.error(errorMsg);
     } finally {
       setLoading(false);
     }
@@ -31,6 +38,7 @@ export default function FormList() {
     try {
       const response = await API.get('/users', { params: { role: 'fieldAgent' } });
       setAgents(response.data.users || []);
+      console.log('👥 Field agents loaded:', response.data.users.length);
     } catch (err) {
       console.error('Failed to fetch agents:', err);
       setAgents([]);
@@ -38,16 +46,11 @@ export default function FormList() {
   };
 
   useEffect(() => {
-    const userData = localStorage.getItem('user');
-    const parsedUser = userData ? JSON.parse(userData) : null;
-    if (parsedUser) {
-      setUser(parsedUser);
-      if (parsedUser.role === 'admin' || parsedUser.role === 'manager') {
-        fetchAgents();
-      }
+    if (user && (user.role === 'admin' || user.role === 'manager')) {
+      fetchAgents();
     }
     fetchForms();
-  }, []);
+  }, [user]);
 
   const handleDelete = async (formId) => {
     if (!window.confirm('Are you sure you want to delete this form?')) {
@@ -57,8 +60,11 @@ export default function FormList() {
     try {
       await API.delete(`/forms/${formId}`);
       setForms(forms.filter(form => form._id !== formId));
+      toast.success('Form deleted successfully');
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to delete form');
+      const errorMsg = err.response?.data?.error || 'Failed to delete form';
+      setError(errorMsg);
+      toast.error(errorMsg);
     }
   };
 
@@ -68,15 +74,18 @@ export default function FormList() {
       setShowAssignModal(false);
       setAssigningForm(null);
       setAgentIds([]);
-      fetchForms();
+      toast.success('Form assigned successfully');
+      fetchForms(); // Refresh to show updated assignments
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to assign form');
+      const errorMsg = err.response?.data?.error || 'Failed to assign form';
+      setError(errorMsg);
+      toast.error(errorMsg);
     }
   };
 
   const openAssignModal = (formId) => {
-    setAssigningForm(formId);
     const form = forms.find(f => f._id === formId);
+    setAssigningForm(formId);
     setAgentIds(form.assignedTo || []);
     setShowAssignModal(true);
   };
@@ -107,12 +116,20 @@ export default function FormList() {
     });
   };
 
+  // Check if user can manage this form
+  const canManageForm = (form) => {
+    if (!user) return false;
+    if (user.role === 'admin') return true;
+    if (user.role === 'manager' && form.createdBy?._id === user.id) return true;
+    return false;
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 py-8">
         <div className="max-w-7xl mx-auto px-4">
           <div className="flex justify-between items-center mb-6">
-            <h1 className="text-3xl font-bold text-blue-600">My Forms</h1>
+            <h1 className="text-3xl font-bold text-blue-600">Forms</h1>
             <div className="h-10 bg-gray-200 rounded w-40 animate-pulse"></div>
           </div>
           <LoadingSkeleton variant="card" />
@@ -122,7 +139,6 @@ export default function FormList() {
   }
 
   if (!user) {
-    navigate('/login');
     return null;
   }
 
@@ -130,20 +146,36 @@ export default function FormList() {
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="max-w-7xl mx-auto px-4">
         <div className="flex justify-between items-center mb-6">
-          <h1 className="text-3xl font-bold text-blue-600">My Forms</h1>
-          {(user.role === 'admin' || user.role === 'manager') && (
+          <h1 className="text-3xl font-bold text-blue-600">
+            {user.role === 'fieldAgent' ? 'Available Forms' : 'Manage Forms'}
+          </h1>
+          <div className="flex gap-3">
             <button
-              onClick={() => navigate('/form-builder')}
-              className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700"
+              onClick={() => navigate('/dashboard')}
+              className="bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400 font-medium"
             >
-              + Create New Form
+              ← Dashboard
             </button>
-          )}
+            {(user.role === 'admin' || user.role === 'manager') && (
+              <button
+                onClick={() => navigate('/form-builder')}
+                className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 font-medium"
+              >
+                + Create New Form
+              </button>
+            )}
+          </div>
         </div>
 
         {error && (
           <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
             {error}
+            <button
+              onClick={() => setError('')}
+              className="ml-4 underline hover:text-red-800"
+            >
+              Dismiss
+            </button>
           </div>
         )}
 
@@ -171,21 +203,23 @@ export default function FormList() {
               </div>
             </div>
 
-            {/* Filter Dropdown */}
-            <div className="md:w-48">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Filter by Status
-              </label>
-              <select
-                value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                <option value="All">All Forms</option>
-                <option value="Active">Active</option>
-                <option value="Inactive">Inactive</option>
-              </select>
-            </div>
+            {/* Filter Dropdown (Admin/Manager only) */}
+            {(user.role === 'admin' || user.role === 'manager') && (
+              <div className="md:w-48">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Filter by Status
+                </label>
+                <select
+                  value={filterStatus}
+                  onChange={(e) => setFilterStatus(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="All">All Forms</option>
+                  <option value="Active">Assigned</option>
+                  <option value="Inactive">Unassigned</option>
+                </select>
+              </div>
+            )}
           </div>
 
           {/* Results Count */}
@@ -204,11 +238,13 @@ export default function FormList() {
             </h3>
             <p className="text-gray-500 mb-6">
               {forms.length === 0 
-                ? 'Get started by creating your first form'
+                ? user.role === 'fieldAgent' 
+                  ? 'No forms have been assigned to you yet'
+                  : 'Get started by creating your first form'
                 : 'Try adjusting your search terms or filters'
               }
             </p>
-            {(user.role === 'admin' || user.role === 'manager') && (
+            {(user.role === 'admin' || user.role === 'manager') && forms.length === 0 && (
               <button
                 onClick={() => navigate('/form-builder')}
                 className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 font-semibold"
@@ -242,7 +278,7 @@ export default function FormList() {
                   </div>
                   
                   <div className="flex flex-wrap gap-2">
-                    {(user.role === 'admin' || (user.role === 'manager' && form.createdBy?._id === user.id)) && (
+                    {canManageForm(form) && (
                       <>
                         <button
                           onClick={() => openAssignModal(form._id)}
@@ -264,9 +300,9 @@ export default function FormList() {
                         </button>
                       </>
                     )}
-                    {(user.role === 'fieldAgent' || !user.role) && (
+                    {user.role === 'fieldAgent' && (
                       <button
-                        onClick={() => navigate(`/form/${form._id}`)}
+                        onClick={() => navigate(`/agent-forms/${form._id}`)}
                         className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 text-sm font-medium"
                       >
                         Fill Form
@@ -282,33 +318,38 @@ export default function FormList() {
         {/* Assign Modal */}
         {showAssignModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 max-w-md w-full">
-              <h2 className="text-xl font-bold mb-4">Assign Form to Agents</h2>
-              <div className="space-y-2 mb-4 max-h-60 overflow-y-auto">
-                {agents.map((agent) => (
-                  <label key={agent._id} className="flex items-center cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={agentIds.includes(agent._id)}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setAgentIds([...agentIds, agent._id]);
-                        } else {
-                          setAgentIds(agentIds.filter(id => id !== agent._id));
-                        }
-                      }}
-                      className="mr-2"
-                    />
-                    <span>{agent.name} ({agent.email})</span>
-                  </label>
-                ))}
+            <div className="bg-white rounded-lg p-6 max-w-md w-full max-h-[80vh] flex flex-col">
+              <h2 className="text-xl font-bold mb-4">Assign Form to Field Agents</h2>
+              <div className="space-y-2 mb-4 overflow-y-auto flex-1">
+                {agents.length === 0 ? (
+                  <p className="text-gray-500 text-center py-4">No field agents available</p>
+                ) : (
+                  agents.map((agent) => (
+                    <label key={agent._id} className="flex items-center cursor-pointer p-2 hover:bg-gray-50 rounded">
+                      <input
+                        type="checkbox"
+                        checked={agentIds.includes(agent._id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setAgentIds([...agentIds, agent._id]);
+                          } else {
+                            setAgentIds(agentIds.filter(id => id !== agent._id));
+                          }
+                        }}
+                        className="mr-3 h-4 w-4 text-blue-600"
+                      />
+                      <span>{agent.name} ({agent.email})</span>
+                    </label>
+                  ))
+                )}
               </div>
               <div className="flex gap-2">
                 <button
                   onClick={handleAssign}
-                  className="flex-1 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+                  disabled={agentIds.length === 0}
+                  className="flex-1 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
                 >
-                  Assign
+                  Assign ({agentIds.length})
                 </button>
                 <button
                   onClick={() => {
@@ -327,4 +368,3 @@ export default function FormList() {
     </div>
   );
 }
-

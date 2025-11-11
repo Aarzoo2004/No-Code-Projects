@@ -1,18 +1,20 @@
 import { BrowserRouter, Routes, Route, Navigate, useParams, useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { Toaster } from 'react-hot-toast';
-import Login from '../src/pages/Login.jsx';
-import Dashboard from '../src/pages/Dashboard.jsx';
-import FormBuilder from '../src/pages/FormBuilder.jsx';
-import FormList from '../src/pages/FormList.jsx';
-import AgentFormFill from '../src/pages/AgentFormFill.jsx';
-import SubmissionList from '../src/pages/SubmissionList.jsx';
-import SubmissionDetails from '../src/pages/SubmissionDetails.jsx';
-import MySubmissions from '../src/pages/MySubmissions.jsx';
-import Reports from '../src/pages/Reports.jsx';
-import DynamicForm from '../src/components/DynamicForm.jsx';
-import ErrorBoundary from '../src/components/ErrorBoundary.jsx';
-import API from '../src/utils/api.js';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import Login from './pages/Login';
+import Dashboard from './pages/Dashboard';
+import FormBuilder from './pages/FormBuilder';
+import FormList from './pages/FormList';
+import AgentFormFill from './pages/AgentFormFill';
+import SubmissionList from './pages/SubmissionList';
+import SubmissionDetails from './pages/SubmissionDetails';
+import MySubmissions from './pages/MySubmissions';
+import Reports from './pages/Reports';
+import Profile from './pages/Profile';
+import DynamicForm from './components/DynamicForm';
+import ErrorBoundary from './components/ErrorBoundary';
+import API from './utils/api';
 
 // Container component to handle data fetching for dynamic form
 function DynamicFormContainer() {
@@ -141,18 +143,9 @@ function FormBuilderContainer() {
   return <FormBuilder initialForm={form} />;
 }
 
-// Role-based protection component
-function ProtectedRoute({ children, allowedRoles }) {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const userData = localStorage.getItem('user');
-    if (userData) {
-      setUser(JSON.parse(userData));
-    }
-    setLoading(false);
-  }, []);
+// Protected Route Component using AuthContext
+function ProtectedRoute({ children, allowedRoles = [] }) {
+  const { user, loading } = useAuth();
 
   if (loading) {
     return (
@@ -169,43 +162,139 @@ function ProtectedRoute({ children, allowedRoles }) {
   }
 
   if (!user) {
-    return <Navigate to="/login" />;
+    return <Navigate to="/login" replace />;
   }
 
-  if (!allowedRoles.includes(user.role)) {
-    return <Navigate to="/dashboard" />;
+  // If allowedRoles is specified and user doesn't have required role
+  if (allowedRoles.length > 0 && !allowedRoles.includes(user.role)) {
+    return <Navigate to="/dashboard" replace />;
   }
 
   return children;
 }
 
+// Public Route - Redirect to dashboard if already logged in
+function PublicRoute({ children }) {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="flex flex-col items-center">
+          <svg className="animate-spin h-12 w-12 text-blue-600 mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          <div className="text-gray-600">Loading...</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (user) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  return children;
+}
+
+function AppRoutes() {
+  return (
+    <Routes>
+      {/* Public Routes */}
+      <Route path="/login" element={
+        <PublicRoute>
+          <Login />
+        </PublicRoute>
+      } />
+
+      {/* Protected Routes - All authenticated users */}
+      <Route path="/dashboard" element={
+        <ProtectedRoute>
+          <Dashboard />
+        </ProtectedRoute>
+      } />
+      
+      <Route path="/profile" element={
+        <ProtectedRoute>
+          <Profile />
+        </ProtectedRoute>
+      } />
+
+      <Route path="/forms" element={
+        <ProtectedRoute>
+          <FormList />
+        </ProtectedRoute>
+      } />
+
+      <Route path="/submissions" element={
+        <ProtectedRoute>
+          <SubmissionList />
+        </ProtectedRoute>
+      } />
+
+      <Route path="/submissions/:id" element={
+        <ProtectedRoute>
+          <SubmissionDetails />
+        </ProtectedRoute>
+      } />
+
+      {/* Field Agent Routes */}
+      <Route path="/agent-forms" element={
+        <ProtectedRoute allowedRoles={['fieldAgent']}>
+          <AgentFormFill />
+        </ProtectedRoute>
+      } />
+
+      <Route path="/agent-forms/:formId" element={
+        <ProtectedRoute allowedRoles={['fieldAgent']}>
+          <AgentFormFill />
+        </ProtectedRoute>
+      } />
+
+      <Route path="/my-submissions" element={
+        <ProtectedRoute allowedRoles={['fieldAgent']}>
+          <MySubmissions />
+        </ProtectedRoute>
+      } />
+
+      {/* Manager/Admin Routes */}
+      <Route path="/form-builder" element={
+        <ProtectedRoute allowedRoles={['admin', 'manager']}>
+          <FormBuilderContainer />
+        </ProtectedRoute>
+      } />
+
+      <Route path="/form-builder/:id" element={
+        <ProtectedRoute allowedRoles={['admin', 'manager']}>
+          <FormBuilderContainer />
+        </ProtectedRoute>
+      } />
+
+      <Route path="/reports" element={
+        <ProtectedRoute allowedRoles={['admin', 'manager']}>
+          <Reports />
+        </ProtectedRoute>
+      } />
+
+      {/* Default redirect */}
+      <Route path="/" element={<Navigate to="/dashboard" replace />} />
+      
+      {/* Catch-all for 404 */}
+      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+    </Routes>
+  );
+}
+
 function App() {
   return (
     <BrowserRouter>
-      <Toaster position="top-right" />
-      <ErrorBoundary>
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/form-builder" element={<FormBuilderContainer />} />
-          <Route path="/form-builder/:id" element={<FormBuilderContainer />} />
-          <Route path="/forms" element={<FormList />} />
-          <Route path="/form/:id" element={<DynamicFormContainer />} />
-          <Route path="/agent-forms" element={<AgentFormFill />} />
-          <Route path="/submissions" element={<SubmissionList />} />
-          <Route path="/submissions/:id" element={<SubmissionDetails />} />
-          <Route path="/my-submissions" element={<MySubmissions />} />
-          <Route 
-            path="/reports" 
-            element={
-              <ProtectedRoute allowedRoles={['admin', 'manager']}>
-                <Reports />
-              </ProtectedRoute>
-            } 
-          />
-          <Route path="/" element={<Navigate to="/login" />} />
-        </Routes>
-      </ErrorBoundary>
+      <AuthProvider>
+        <Toaster position="top-right" />
+        <ErrorBoundary>
+          <AppRoutes />
+        </ErrorBoundary>
+      </AuthProvider>
     </BrowserRouter>
   );
 }
